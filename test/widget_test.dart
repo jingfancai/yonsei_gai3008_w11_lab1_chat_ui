@@ -35,7 +35,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pumpAndSettle();
     expect(find.byType(TypingDots), findsNothing);
-    expect(find.textContaining('실습용 모의 응답입니다'), findsOneWidget);
+    expect(find.textContaining(RegExp('안녕하세요!|반가워요!')), findsOneWidget);
+  });
+
+  testWidgets('연속 전송에서 로컬 서비스가 최근 주제를 기억한다', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ChatPage(initialMessages: [])));
+    for (final question in ['Flutter가 뭐야?', '예시를 보여줘']) {
+      await tester.enterText(find.byType(TextField), question);
+      await tester.tap(find.byTooltip('메시지 전송'));
+      await tester.pump();
+      expect(find.byType(TypingDots), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1000));
+      expect(find.byType(TypingDots), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.byType(TypingDots), findsNothing);
+    }
+    expect(find.textContaining(RegExp('Flutter의 간단한 화면 예시|Flutter에서는 Row')), findsOneWidget);
   });
 
   testWidgets('공백은 무시하고 키보드 전송을 지원한다', (tester) async {
