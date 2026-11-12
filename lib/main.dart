@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'services/mock_chat_service.dart';
+import 'models/chat_reply.dart';
 
 void main() => runApp(const ChatLabApp());
 
@@ -26,19 +27,15 @@ class ChatLabApp extends StatelessWidget {
 
 /// 대화 한 줄. 서버 없이 화면만 만들기 위한 최소 모델.
 class ChatMessage {
-  const ChatMessage({required this.text, required this.isUser});
+  const ChatMessage({required this.text, required this.isUser, this.reply});
 
   final String text;
   final bool isUser;
+  final ChatReply? reply;
 }
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, this.initialMessages = const [
-    ChatMessage(text: '오늘 뭐 배워?', isUser: true),
-    ChatMessage(text: 'AI 챗봇에 움직이는 응답을 붙입니다.', isUser: false),
-    ChatMessage(text: '타이핑 점은 왜 필요해요?', isUser: true),
-    ChatMessage(text: '응답이 1초를 넘으면 앱이 멈춘 것처럼 보이기 때문입니다.', isUser: false),
-  ]});
+  const ChatPage({super.key, this.initialMessages = const []});
 
   final List<ChatMessage> initialMessages;
 
@@ -50,9 +47,9 @@ class _ChatPageState extends State<ChatPage> {
   late final List<ChatMessage> _messages = List.of(widget.initialMessages);
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final _chatService = MockChatService();
-  Timer? _replyTimer;
-  bool _isTyping = false;
+  MockChatService _chatService = MockChatService();
+  final Map<ChatReply, Timer> _timers = {};
+  ChatError? _simulation;
 
   void _scrollToLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,29 +64,84 @@ class _ChatPageState extends State<ChatPage> {
 
   void _send() {
     final text = _controller.text.trim();
-    if (text.isEmpty || _isTyping) return;
+    if (text.isEmpty) return;
+    final reply = ChatReply(text, _simulation);
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
-      _isTyping = true;
+      _messages.add(ChatMessage(text: '', isUser: false, reply: reply));
+      // 시뮬레이션은 다음 메시지 한 번에만 적용한다.
+      _simulation = null;
     });
     _controller.clear();
     _scrollToLatest();
-    _replyTimer = Timer(const Duration(milliseconds: 1500), () {
+    _schedule(reply, const Duration(milliseconds: 1500), simulate: true);
+  }
+
+  void _schedule(ChatReply reply, Duration delay, {required bool simulate}) {
+    _timers.remove(reply)?.cancel();
+    _timers[reply] = Timer(delay, () {
+      _timers.remove(reply);
       if (!mounted) return;
+      final failure = simulate ? reply.simulatedError : null;
+      if (failure == ChatError.rateLimited && reply.automaticRetries < 2) {
+        final seconds = 1 << reply.automaticRetries;
+        setState(() {
+          reply.error = failure;
+          reply.automaticRetries++;
+        });
+        _schedule(reply, Duration(seconds: seconds), simulate: true);
+        _scrollToLatest();
+        return;
+      }
       setState(() {
-        _messages.add(ChatMessage(
-          text: _chatService.reply(text),
-          isUser: false,
-        ));
-        _isTyping = false;
+        try {
+          if (failure != null) {
+            reply.error = failure;
+            reply.status = ReplyStatus.error;
+          } else {
+            reply.text = _chatService.reply(reply.prompt);
+            reply.error = null;
+            reply.status = ReplyStatus.success;
+          }
+        } catch (_) {
+          reply.error = ChatError.server;
+          reply.status = ReplyStatus.error;
+        }
       });
       _scrollToLatest();
     });
   }
 
+  void _retry(ChatReply reply) {
+    if (reply.status != ReplyStatus.error) return;
+    setState(() {
+      reply.status = ReplyStatus.loading;
+      reply.error = null;
+      reply.automaticRetries = 0;
+    });
+    // 수동 재시도에서는 개발용 오류를 해제해 복구를 확인한다.
+    _schedule(reply, const Duration(milliseconds: 1500), simulate: false);
+    _scrollToLatest();
+  }
+
+  void _reset() {
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    _timers.clear();
+    setState(() {
+      _messages.clear();
+      _controller.clear();
+      _simulation = null;
+      _chatService = MockChatService();
+    });
+  }
+
   @override
   void dispose() {
-    _replyTimer?.cancel();
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -99,7 +151,26 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(title: const Text('AI Chat — 실습 1')),
+      appBar: AppBar(
+        title: const Text('AI Chat — 실습 1'),
+        actions: [
+          PopupMenuButton<ChatError?>(
+            tooltip: '개발용 오류 시뮬레이션',
+            icon: const Icon(Icons.bug_report_outlined),
+            onSelected: (value) => setState(() => _simulation = value),
+            itemBuilder: (context) => [
+              PopupMenuItem<ChatError?>(onTap: () => setState(() => _simulation = null), child: const Text('일반 채팅 (오류 해제)')),
+              for (final error in ChatError.values)
+                PopupMenuItem(value: error, child: Text('다음 메시지: ${error.code} 오류')),
+            ],
+          ),
+          IconButton(
+            tooltip: '대화 초기화',
+            onPressed: _reset,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -124,24 +195,27 @@ class _ChatPageState extends State<ChatPage> {
                       controller: _scrollController,
                       reverse: true,
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: _messages.length + (_isTyping ? 1 : 0),
+                      itemCount: _messages.length,
+                      findChildIndexCallback: (key) {
+                        final index = _messages.indexWhere((message) => ObjectKey(message) == key);
+                        return index < 0 ? null : _messages.length - 1 - index;
+                      },
                       itemBuilder: (context, index) {
-                        if (_isTyping && index == 0) {
-                          return const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              child: TypingDots(),
-                            ),
-                          );
-                        }
-                        final messageIndex = index - (_isTyping ? 1 : 0);
-                        return _Bubble(
-                          message: _messages[_messages.length - 1 - messageIndex],
+                        final message = _messages[_messages.length - 1 - index];
+                        return KeyedSubtree(
+                          key: ObjectKey(message),
+                          child: message.reply == null
+                              ? _Bubble(message: message)
+                              : _ReplyBubble(reply: message.reply!, onRetry: () => _retry(message.reply!)),
                         );
                       },
                     ),
             ),
+            if (_simulation != null)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text('개발용: 다음 메시지에 ${_simulation!.code} 오류를 1회 시뮬레이션합니다.'),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
               child: Row(
@@ -164,7 +238,7 @@ class _ChatPageState extends State<ChatPage> {
                     valueListenable: _controller,
                     builder: (context, value, child) => IconButton.filled(
                       tooltip: '메시지 전송',
-                      onPressed: _isTyping || value.text.trim().isEmpty ? null : _send,
+                      onPressed: value.text.trim().isEmpty ? null : _send,
                       icon: const Icon(Icons.send),
                     ),
                   ),
@@ -179,7 +253,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({super.key, required this.message});
 
   final ChatMessage message;
 
@@ -201,6 +275,63 @@ class _Bubble extends StatelessWidget {
           style: TextStyle(color: message.isUser ? colors.onPrimaryContainer : colors.onSurface),
         ),
       ),
+    );
+  }
+}
+
+class _ReplyBubble extends StatelessWidget {
+  const _ReplyBubble({required this.reply, required this.onRetry});
+  final ChatReply reply;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: switch (reply.status) {
+        ReplyStatus.success => _Bubble(
+            key: const ValueKey('success'),
+            message: ChatMessage(text: reply.text, isUser: false),
+          ),
+        ReplyStatus.loading => Align(
+            key: const ValueKey('loading'),
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const TypingDots(),
+                  if (reply.automaticRetries > 0)
+                    Text('429: 자동 재시도 ${reply.automaticRetries}/2 · ${1 << (reply.automaticRetries - 1)}초 대기'),
+                ],
+              ),
+            ),
+          ),
+        ReplyStatus.error => Align(
+            key: const ValueKey('error'),
+            alignment: Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.all(12),
+              constraints: const BoxConstraints(maxWidth: 420),
+              decoration: BoxDecoration(
+                color: colors.errorContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${reply.error!.code}: ${reply.error!.message}', style: TextStyle(color: colors.onErrorContainer)),
+                  TextButton(onPressed: onRetry, child: const Text('다시 시도')),
+                ],
+              ),
+            ),
+          ),
+      },
     );
   }
 }
