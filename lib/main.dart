@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'services/mock_chat_service.dart';
+
 void main() => runApp(const ChatLabApp());
 
 class ChatLabApp extends StatelessWidget {
@@ -48,6 +50,7 @@ class _ChatPageState extends State<ChatPage> {
   late final List<ChatMessage> _messages = List.of(widget.initialMessages);
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _chatService = MockChatService();
   Timer? _replyTimer;
   bool _isTyping = false;
 
@@ -74,8 +77,8 @@ class _ChatPageState extends State<ChatPage> {
     _replyTimer = Timer(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
       setState(() {
-        _messages.add(const ChatMessage(
-          text: '좋은 질문이에요! 지금은 실습용 모의 응답입니다. 함께 채팅 UI를 완성해 봐요.',
+        _messages.add(ChatMessage(
+          text: _chatService.reply(text),
           isUser: false,
         ));
         _isTyping = false;
