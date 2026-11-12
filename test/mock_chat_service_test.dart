@@ -49,7 +49,7 @@ void main() {
 
   test('기억이 없거나 모르는 질문에는 재질문한다', () {
     expect(service.reply('예시를 보여줘'), anyOf(contains('어떤 주제'), contains('구체적으로')));
-    for (final input in ['', '오늘 저녁 메뉴 추천', 'this is a ship', 'Flutter 출시일?']) {
+    for (final input in ['', '우주선 설계도', 'this is a ship', 'Flutter 출시일?']) {
       expect(service.reply(input), anyOf(contains('어떤 주제'), contains('구체적으로')));
     }
     service.reply('Flutter란?');
@@ -75,6 +75,13 @@ void main() {
     expect(service.reply('举个例子'), contains('Dart'));
     expect(service.reply('动画是什么？'), anyOf(contains('애니메이션'), contains('타이핑')));
     expect(service.reply('How to use widgets?'), contains('위젯'));
+  });
+
+  test('일상 주제와 추천 의도 및 후속 질문을 지원한다', () {
+    for (final topic in ['일상', '공부', '음식', '여행']) {
+      expect(service.reply('$topic 추천해 줘'), isNot(contains('이해하지 못했어요')));
+      expect(service.reply('예시를 보여줘'), isNot(contains('이해하지 못했어요')));
+    }
   });
 
   test('대화 기억은 서비스 인스턴스 사이에 공유되지 않는다', () {

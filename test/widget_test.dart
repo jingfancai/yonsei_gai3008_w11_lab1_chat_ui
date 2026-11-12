@@ -4,15 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lab1_chat_ui/main.dart';
 
 void main() {
-  testWidgets('앱의 예제 대화와 입력창이 보인다', (tester) async {
+  testWidgets('앱은 빈 상태와 하단 입력창으로 시작한다', (tester) async {
     await tester.pumpWidget(const ChatLabApp());
-    expect(find.text('AI Chat — 실습 1'), findsOneWidget);
-    expect(find.byType(ListView), findsOneWidget);
-    expect(find.text('오늘 뭐 배워?'), findsOneWidget);
+    expect(find.text('무엇이든 물어보세요'), findsOneWidget);
+    expect(find.text('오늘 뭐 배워?'), findsNothing);
     expect(find.byType(TextField), findsOneWidget);
-    final user = tester.getRect(find.text('오늘 뭐 배워?'));
-    final ai = tester.getRect(find.text('AI 챗봇에 움직이는 응답을 붙입니다.'));
-    expect(user.right, greaterThan(ai.right));
+    expect(tester.widget<Scaffold>(find.byType(Scaffold)).resizeToAvoidBottomInset, isTrue);
   });
 
   testWidgets('빈 상태에서 전송하면 타이핑 후 모의 응답이 나타난다', (tester) async {
