@@ -12,6 +12,52 @@ flutter run -d chrome      # 또는 -d <에뮬레이터>
 
 서버가 필요 없습니다. 로컬 규칙 기반 응답으로 채팅을 연습합니다.
 
+## 실행 화면
+
+실제 캡처 이미지를 추가할 위치와 표시 형식을 아래에 준비했습니다.
+현재 이미지 파일은 **캡처 대기** 상태입니다. 파일을 저장한 뒤 해당 이미지 태그의
+HTML 주석을 제거하면 원본 비율을 유지한 너비 720px로 표시됩니다.
+[스크린샷 저장·촬영 안내](docs/screenshots/README.md)를 참고해 주세요.
+
+### 초기 빈 화면
+
+앱 실행 또는 대화 초기화 후 중앙에 **무엇이든 물어보세요**를 표시합니다.
+하단 입력창에서 첫 메시지를 보내면 채팅 목록으로 전환됩니다.
+
+파일: `docs/screenshots/empty-state.png` · 상태: 캡처 대기
+
+<!-- 실제 PNG 저장 후 이 주석을 제거하세요.
+<p align="center">
+  <img src="docs/screenshots/empty-state.png" alt="초기 빈 화면: 중앙 안내 문구와 하단 입력창" width="720">
+</p>
+-->
+
+### 일반 채팅 화면
+
+사용자 메시지는 오른쪽, 로컬 규칙 기반 답변은 왼쪽에 표시됩니다.
+응답을 기다리는 동안 TypingDots가 움직이고 최신 대화로 자동 스크롤됩니다.
+
+파일: `docs/screenshots/chat.png` · 상태: 캡처 대기
+
+<!-- 실제 PNG 저장 후 이 주석을 제거하세요.
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="일반 채팅: 사용자와 AI 말풍선의 좌우 배치" width="720">
+</p>
+-->
+
+### 오류 및 다시 시도 화면
+
+개발용 500 오류 시뮬레이션으로 한국어 오류 안내와 **다시 시도** 버튼을 확인합니다.
+버튼을 누르면 사용자 메시지를 중복 추가하지 않고 오류 응답을 정상 답변으로 교체합니다.
+
+파일: `docs/screenshots/error-retry.png` · 상태: 캡처 대기
+
+<!-- 실제 PNG 저장 후 이 주석을 제거하세요.
+<p align="center">
+  <img src="docs/screenshots/error-retry.png" alt="500 오류 말풍선과 다시 시도 버튼" width="720">
+</p>
+-->
+
 ## 할 일
 
 | # | 내용 | 상태 |
